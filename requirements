@@ -1,0 +1,8 @@
+Dưới đây là những thư viện cần install
+numpy
+pandas
+scikit-learn
+streamlit
+streamlit-autorefresh
+joblib
+matplotlib

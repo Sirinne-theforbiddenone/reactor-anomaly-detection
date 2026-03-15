@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+
+reactor.db
+model.pkl
+
+.env
