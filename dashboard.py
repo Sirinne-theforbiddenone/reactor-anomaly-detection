@@ -8,7 +8,6 @@ from streamlit_autorefresh import st_autorefresh
 # =========================
 # AUTO REFRESH
 # =========================
-
 st_autorefresh(interval=3000)
 
 st.title("AI Nuclear Reactor Monitoring")
@@ -16,40 +15,51 @@ st.title("AI Nuclear Reactor Monitoring")
 # =========================
 # LOAD MODEL
 # =========================
-
-model = joblib.load("model.pkl")
+try:
+    model = joblib.load("model.pkl")
+except:
+    st.error("Model chưa tồn tại! Hãy chạy train_model.py trước.")
+    st.stop()
 
 # =========================
-# CONNECT DATABASE (READ ONLY)
+# CONNECT DATABASE
 # =========================
-
-conn = sqlite3.connect(
-    "file:reactor.db?mode=ro",
-    uri=True,
-    check_same_thread=False,
-    timeout=10
-)
+try:
+    conn = sqlite3.connect(
+        "file:reactor.db?mode=ro",
+        uri=True,
+        check_same_thread=False
+    )
+except:
+    st.error("Database chưa sẵn sàng!")
+    st.stop()
 
 # =========================
 # LOAD DATA
 # =========================
+try:
+    data = pd.read_sql_query(
+        """
+        SELECT temperature, pressure, flux, coolant, radiation
+        FROM reactor_data
+        ORDER BY time DESC
+        LIMIT 200
+        """,
+        conn
+    )
+except:
+    st.warning("Chưa có dữ liệu từ simulator...")
+    st.stop()
 
-data = pd.read_sql_query(
-    """
-    SELECT temperature, pressure, flux, coolant, radiation
-    FROM reactor_data
-    ORDER BY time DESC
-    LIMIT 200
-    """,
-    conn
-)
+if len(data) < 10:
+    st.warning("Dữ liệu chưa đủ để phân tích")
+    st.stop()
 
 data = data[::-1].reset_index(drop=True)
 
 # =========================
-# FEATURES FOR MODEL
+# FEATURES
 # =========================
-
 features = data[[
     "temperature",
     "pressure",
@@ -61,17 +71,15 @@ features = data[[
 # =========================
 # AI PREDICTION
 # =========================
-
 prediction = model.predict(features)
-data["anomaly"] = prediction
-
 score = model.decision_function(features)
+
+data["anomaly"] = prediction
 data["score"] = score
 
 # =========================
-# STATUS USING RECENT DATA
+# STATUS
 # =========================
-
 recent = data.tail(5)
 
 avg_temp = recent["temperature"].mean()
@@ -89,67 +97,53 @@ else:
     st.success("NORMAL: Reactor stable")
 
 # =========================
-# FIND ANOMALY CAUSE
+# ROOT CAUSE ANALYSIS
 # =========================
-
 mean_vals = features.mean()
 std_vals = features.std()
 
 def detect_cause(row):
-
     causes = []
-
     for col in features.columns:
-
         if abs(row[col] - mean_vals[col]) > 2 * std_vals[col]:
             causes.append(col)
-
     return causes
 
-
 fault_map = {
-    "temperature": "Reactor overheating",
-    "flux": "Neutron flux spike",
-    "coolant": "Coolant instability",
-    "pressure": "Pressure fluctuation",
-    "radiation": "Radiation anomaly"
+    "temperature": "Overheating",
+    "flux": "Flux spike",
+    "coolant": "Coolant issue",
+    "pressure": "Pressure issue",
+    "radiation": "Radiation spike"
 }
 
 latest = data.iloc[-1]
 
 if latest["anomaly"] == -1:
-
     causes = detect_cause(latest)
 
     if causes:
-
         for c in causes:
-            st.warning("Possible cause: " + fault_map.get(c, c))
-
+            st.warning("Cause: " + fault_map.get(c, c))
     else:
-        st.info("AI detected unusual parameter combination")
+        st.info("Unknown anomaly pattern")
 
 # =========================
-# HIGHLIGHT TABLE
+# TABLE
 # =========================
-
 st.subheader("Latest Data")
 
 def highlight(row):
-
     if row["anomaly"] == -1:
-        return ["background-color: red"] * len(row)
-
+        return ["background-color: #ffcccc"] * len(row)
     return [""] * len(row)
 
 st.dataframe(data.style.apply(highlight, axis=1))
 
 # =========================
-# SENSOR CHART FUNCTION
+# PLOT FUNCTION
 # =========================
-
 def plot_sensor(sensor):
-
     fig, ax = plt.subplots()
 
     ax.plot(data[sensor], label=sensor)
@@ -163,29 +157,23 @@ def plot_sensor(sensor):
         label="Anomaly"
     )
 
-    ax.set_xlabel("Time Step")
+    ax.set_xlabel("Time")
     ax.set_ylabel(sensor)
-
     ax.legend()
 
     st.pyplot(fig)
 
 # =========================
-# SENSOR MONITORING
+# SENSOR CHARTS
 # =========================
-
 st.subheader("Sensor Monitoring")
 
-plot_sensor("temperature")
-plot_sensor("pressure")
-plot_sensor("flux")
-plot_sensor("coolant")
-plot_sensor("radiation")
+for sensor in features.columns:
+    plot_sensor(sensor)
 
 # =========================
-# ANOMALY SCORE
+# SCORE CHART
 # =========================
-
 st.subheader("AI Anomaly Score")
 
 fig, ax = plt.subplots()
@@ -201,9 +189,5 @@ ax.scatter(
     label="Anomaly"
 )
 
-ax.set_xlabel("Time Step")
-ax.set_ylabel("Anomaly Score")
-
 ax.legend()
-
 st.pyplot(fig)
