@@ -1,23 +1,81 @@
 # AI Reactor Monitoring System
 
-Project này mô phỏng hệ thống AI phát hiện rủi ro của lò phản ứng hạt nhân
+Hệ thống mô phỏng giám sát lò phản ứng hạt nhân sử dụng AI để phát hiện bất thường trong dữ liệu cảm biến theo thời gian thực.
 
-Tính năng:
+## Tính năng chính
 
 - Mô phỏng hoạt động của lò phản ứng hạt nhân
-- Tạo dữ liệu giống cảm biến của lò phản ứng hạt nhân
-- Cơ sở dữ liệu SQL để lưu trữ dữ liệu
-- AI phát hiện bất thường trong hoạt động
-- Bảng điều khiển giám sát thời gian thực
+- Sinh dữ liệu cảm biến theo thời gian thực
+- Mô phỏng lỗi:
+  - Quá nhiệt (Overheating)
+  - Mất nước làm mát (Coolant Failure)
+  - Flux instability
+  - Radiation spike
+- AI Anomaly Detection bằng Isolation Forest
+- Feature Engineering cho dữ liệu cảm biến
+- Stability Index và Health Score
+- Dashboard realtime bằng Streamlit
+- Root Cause Analysis
+- Event Timeline Monitoring
+- SQLite database để lưu dữ liệu và log sự kiện
 
-Các bước chạy chương trình mô phỏng:
+---
 
+# Công nghệ sử dụng
+
+- Python
+- SQLite
+- Streamlit
+- Scikit-learn
+- Isolation Forest
+- Pandas
+- Matplotlib
+
+---
+
+# Cấu trúc project
+
+```text
+project/
+│
+├── dashboard.py
+├── run_simulation.py
+├── reactor_model.py
+├── train_model.py
+├── anomaly_detector.py
+├── feature_engineering.py
+├── database.py
+├── requirements.txt
+├── reactor.db
+├── model.pkl
+├── scaler.pkl
+└── README.md
+```
+
+## Các bước chạy chương trình
+# Cài đặt thư viện
 pip install -r requirements.txt
 
-python run_simulation.py (chạy file khoảng 30 - 60 giây rồi dừng mô phỏng bằng ctrl + C)
+# Chạy mô phỏng dữ liệu
+python run_simulation.py
+Nên chạy simulator khoảng 30–60 giây để tạo dữ liệu trước khi train model.
 
+# Dừng simulator
+Ctrl + C
+
+# Train AI model
 python train_model.py
 
-Chạy dashboard:
-
+# Chạy dashboard
 streamlit run dashboard.py
+
+## Workflow hệ thống
+Simulator
+    ↓
+SQLite Database
+    ↓
+Feature Engineering
+    ↓
+AI Anomaly Detection
+    ↓
+Realtime Dashboard

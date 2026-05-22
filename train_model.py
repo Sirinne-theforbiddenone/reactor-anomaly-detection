@@ -1,30 +1,95 @@
 # FILE NÀY ĐỂ TRAIN CÁI MODEL Ở FILE anomaly_detector.py
-import pandas as pd
 import sqlite3
-from sklearn.ensemble import IsolationForest
+import pandas as pd
 import joblib
+
+from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
+
+from feature_engineering import build_features
+
+# =========================
+# LOAD DATABASE
+# =========================
 
 conn = sqlite3.connect("reactor.db")
 
 data = pd.read_sql_query(
-"SELECT temperature, pressure, flux, coolant, radiation FROM reactor_data", #truy vấn dữ liệu từ bảng reactor_data trong database
-conn
+    """
+    SELECT *
+    FROM reactor_data
+    """,
+    conn
 )
 
-data = data[data["temperature"] < 330]
+# =========================
+# FEATURE ENGINEERING
+# =========================
 
-if data.empty:
-    print("Database have no data. Please run the reactor simulation first.") # chưa có dữ liệu thì dừng code
-    exit()
+data = build_features(data)
 
-print("Training samples:", len(data))
+# =========================
+# NORMAL OPERATING REGION
+# =========================
 
-# train model
-model = IsolationForest(contamination=0.02)
+data = data[
 
-model.fit(data)
+    (data["temperature"] < 330) &
+    (data["flux"] < 1100) &
+    (data["coolant"] > 450) &
+    (data["radiation"] < 90)
 
-# lưu model
+]
+
+# =========================
+# TRAIN FEATURES
+# =========================
+
+features = data[[
+
+    "temperature",
+    "pressure",
+    "flux",
+    "coolant",
+    "radiation",
+    "control_rod",
+
+    "heat_balance",
+    "thermal_stress",
+
+    "temp_change",
+    "flux_change",
+    "radiation_change"
+
+]]
+
+# =========================
+# SCALE DATA
+# =========================
+
+scaler = StandardScaler()
+
+scaled_features = scaler.fit_transform(features)
+
+# =========================
+# TRAIN MODEL
+# =========================
+
+model = IsolationForest(
+
+    contamination=0.02,
+    random_state=42
+
+)
+
+model.fit(scaled_features)
+
+# =========================
+# SAVE MODEL
+# =========================
+
 joblib.dump(model, "model.pkl")
 
-print("Model trained and saved!")
+joblib.dump(scaler, "scaler.pkl")
+
+print("Model trained successfully")

@@ -1,19 +1,49 @@
-# FILE NÀY LÀ MODEL AI PHÁT HIỆN BẤT THƯỜNG TRONG DATA
-from sklearn.ensemble import IsolationForest
+import joblib
+import pandas as pd
 
-#khúc này thuần vibe code
+from feature_engineering import build_features
+
 class AnomalyDetector:
 
-    def __init__(self): #hàm khởi tạo
+    def __init__(self):
 
-        self.model = IsolationForest(contamination=0.02) #gen ra 1 đống dữ liệu random, trong đó có 2% là dell ổn
+        self.model = joblib.load("model.pkl")
 
-    def train(self, data): #hàm train model, data là mảng 2 chiều lấy dữ liệu từ cái database kia 
+        self.scaler = joblib.load("scaler.pkl")
 
-        self.model.fit(data) #model nhận biết chỗ data dell ổn kia
+    def predict(self, data):
 
-    def detect(self, x): #hàm detect, x là 1 mảng 1 chiều chứa dữ liệu mới cần kiểm tra
+        # dataframe copy
+        data = data.copy()
 
-        result = self.model.predict([x]) #model sẽ trả về 1 mảng chứa 1 giá trị duy nhất, nếu là -1 thì bất thường, nếu là 1 thì bình thường
+        # feature engineering
+        data = build_features(data)
 
-        return result[0] 
+        # select features
+        features = data[[
+
+            "temperature",
+            "pressure",
+            "flux",
+            "coolant",
+            "radiation",
+            "control_rod",
+
+            "heat_balance",
+            "thermal_stress",
+
+            "temp_change",
+            "flux_change",
+            "radiation_change"
+
+        ]]
+
+        # scaling
+        scaled = self.scaler.transform(features)
+
+        # prediction
+        prediction = self.model.predict(scaled)
+
+        score = self.model.decision_function(scaled)
+
+        return prediction, score

@@ -3,30 +3,45 @@ import sqlite3
 
 def connect_db():
 
-    conn = sqlite3.connect("reactor.db") # Kết nối đến file database, nếu chưa có sẽ tự tạo mới
+    conn = sqlite3.connect(
+        "reactor.db",
+        check_same_thread=False
+    )
+
     cursor = conn.cursor()
-    
-    # Bảng này lưu trữ dữ liệu hoạt động của lò phản ứng theo thời gian
+
+    # =========================
+    # REACTOR SENSOR DATA
+    # =========================
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS reactor_data(    
+    CREATE TABLE IF NOT EXISTS reactor_data(
+
         time INTEGER,
+
         temperature REAL,
         pressure REAL,
         flux REAL,
         coolant REAL,
-        radiation REAL
+        radiation REAL,
+        control_rod REAL
+
     )
     """)
 
-    # Bảng này lưu trữ log về các sự kiện bất thường được phát hiện
+    # =========================
+    # ANOMALY / EVENT LOG
+    # =========================
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS anomaly_log(  
+    CREATE TABLE IF NOT EXISTS anomaly_log(
+
         time INTEGER,
         level TEXT,
+        event TEXT,
         temperature REAL
+
     )
     """)
 
-    conn.commit() # Nhớ có commit sau khi tạo bảng để lưu thay đổi
+    conn.commit()
 
     return conn
