@@ -1,6 +1,11 @@
-import streamlit as st
+# ==================================================
+# AI REACTOR MONITORING DASHBOARD
+# ==================================================
+
 import sqlite3
+
 import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
 
 from streamlit_autorefresh import st_autorefresh
@@ -8,22 +13,32 @@ from streamlit_autorefresh import st_autorefresh
 from anomaly_detector import AnomalyDetector
 from feature_engineering import build_features
 
+
 # ==================================================
 # PAGE CONFIG
 # ==================================================
 
 st.set_page_config(
+
     page_title="AI Reactor Monitoring",
+
     layout="wide"
+
 )
+
 
 # ==================================================
 # AUTO REFRESH
 # ==================================================
 
-refresh_rate = 3000
+st_autorefresh(
 
-st_autorefresh(interval=refresh_rate)
+    interval=3000,
+
+    key="reactor_refresh"
+
+)
+
 
 # ==================================================
 # CUSTOM STYLE
@@ -33,16 +48,23 @@ st.markdown(
     """
     <style>
 
-    .stMetric {
+    .metric-card {
+
         background-color: #111111;
-        border-radius: 10px;
+
+        border-radius: 12px;
+
         padding: 10px;
+
+        border: 1px solid #333333;
+
     }
 
     </style>
     """,
     unsafe_allow_html=True
 )
+
 
 # ==================================================
 # TITLE
@@ -51,78 +73,115 @@ st.markdown(
 st.title("AI Nuclear Reactor Monitoring System")
 
 st.markdown("""
-Real-time AI-assisted monitoring and anomaly detection
-for a simulated nuclear reactor system.
+Real-time monitoring and AI-based anomaly detection
+for a simulated nuclear reactor environment.
 """)
+
 
 # ==================================================
 # SIDEBAR
 # ==================================================
 
-st.sidebar.title("System Control Panel")
-
-show_only_anomaly = st.sidebar.checkbox(
-    "Show anomaly points only",
-    value=False
-)
+st.sidebar.title("Control Panel")
 
 selected_window = st.sidebar.slider(
+
     "Chart Window",
+
     min_value=50,
-    max_value=500,
-    value=200,
+    max_value=1000,
+
+    value=300,
+
     step=50
+
 )
 
 selected_sensor = st.sidebar.selectbox(
-    "Focus Sensor",
+
+    "Focused Sensor",
+
     [
+
         "temperature",
         "pressure",
         "flux",
         "coolant",
         "radiation",
         "control_rod",
+
         "heat_balance",
         "thermal_stress",
-        "stability_index"
+        "stability_index",
+
+        "temp_change",
+        "flux_change",
+        "coolant_change",
+
+        "temp_volatility",
+        "flux_volatility"
+
     ]
+
 )
 
+show_only_anomaly = st.sidebar.checkbox(
+
+    "Show anomaly only",
+
+    value=False
+
+)
+
+show_raw_scores = st.sidebar.checkbox(
+
+    "Show raw AI score",
+
+    value=True
+
+)
+
+
 # ==================================================
-# LOAD DETECTOR
+# LOAD AI MODEL
 # ==================================================
 
 try:
 
     detector = AnomalyDetector()
 
-except:
+except Exception as e:
 
     st.error(
-        "Không thể load AI model.\n\n"
-        "Hãy chạy train_model.py trước."
+        "Cannot load AI model.\n"
+        "Run train_model.py first."
     )
 
     st.stop()
 
+
 # ==================================================
-# CONNECT DATABASE
+# DATABASE CONNECTION
 # ==================================================
 
 try:
 
     conn = sqlite3.connect(
+
         "file:reactor.db?mode=ro",
+
         uri=True,
+
         check_same_thread=False
+
     )
 
 except:
 
-    st.error("Không thể kết nối database")
+    st.error("Database connection failed")
 
     st.stop()
+
 
 # ==================================================
 # LOAD DATA
@@ -131,32 +190,42 @@ except:
 try:
 
     data = pd.read_sql_query(
+
         f"""
         SELECT *
         FROM reactor_data
         ORDER BY time DESC
         LIMIT {selected_window}
         """,
+
         conn
+
     )
 
 except:
 
-    st.warning("Đang chờ dữ liệu từ simulator...")
+    st.warning("Waiting for simulator data...")
 
     st.stop()
 
-if len(data) < 20:
-
-    st.warning("Dữ liệu chưa đủ để phân tích")
-
-    st.stop()
 
 # ==================================================
-# TIMELINE ORDER
+# VALIDATION
+# ==================================================
+
+if len(data) < 30:
+
+    st.warning("Not enough data yet")
+
+    st.stop()
+
+
+# ==================================================
+# REVERSE TIMELINE
 # ==================================================
 
 data = data[::-1].reset_index(drop=True)
+
 
 # ==================================================
 # FEATURE ENGINEERING
@@ -164,70 +233,113 @@ data = data[::-1].reset_index(drop=True)
 
 data = build_features(data)
 
+
 # ==================================================
-# AI DETECTION
+# AI PREDICTION
 # ==================================================
 
 prediction, score = detector.predict(data)
 
 data["anomaly"] = prediction
+
 data["score"] = score
 
+
 # ==================================================
-# STABILITY INDEX
+# STICKY ANOMALY FILTER
+# ==================================================
+#
+# giúp giảm spam anomaly
+#
+# chỉ coi là anomaly nếu:
+# - AI score thấp mạnh
+# - hoặc xuất hiện liên tục
+#
 # ==================================================
 
-data["stability_index"] = (
+data["filtered_anomaly"] = 1
 
-    data["coolant"]
+data.loc[data["score"] < -0.10, "filtered_anomaly"] = -1
 
-    /
+rolling_anomaly = (
 
-    (
-        data["temperature"]
-        +
-        data["radiation"]
-        +
-        1
-    )
+    (data["anomaly"] == -1)
+
+    .rolling(5)
+
+    .sum()
 
 )
 
-# ==================================================
-# HEALTH SCORE
-# ==================================================
+data.loc[rolling_anomaly >= 4, "filtered_anomaly"] = -1
 
-latest = data.iloc[-1]
-
-health_score = 100
-
-health_score -= abs(
-    latest["temperature"] - 300
-) * 0.15
-
-health_score -= abs(
-    latest["flux"] - 1000
-) * 0.03
-
-health_score -= abs(
-    latest["coolant"] - 500
-) * 0.05
-
-health_score = max(0, min(100, health_score))
 
 # ==================================================
 # LATEST VALUES
 # ==================================================
 
+latest = data.iloc[-1]
+
 prev = data.iloc[-2]
 
 temp = latest["temperature"]
+
 pressure = latest["pressure"]
+
 flux = latest["flux"]
+
 coolant = latest["coolant"]
+
 radiation = latest["radiation"]
+
 control_rod = latest["control_rod"]
+
 stability = latest["stability_index"]
+
+latest_score = latest["score"]
+
+scram = latest.get("scram", 0)
+
+
+# ==================================================
+# HEALTH SCORE
+# ==================================================
+
+health_score = 100
+
+health_score -= abs(temp - 300) * 0.08
+
+health_score -= abs(flux - 1000) * 0.015
+
+health_score -= abs(coolant - 500) * 0.03
+
+health_score -= abs(radiation - 50) * 0.10
+
+health_score += latest_score * 30
+
+health_score = max(0, min(100, health_score))
+
+
+# ==================================================
+# ANOMALY ANALYSIS
+# ==================================================
+
+recent_anomaly_count = len(
+
+    data.tail(30)[
+        data.tail(30)["filtered_anomaly"] == -1
+    ]
+
+)
+
+anomaly_ratio = (
+
+    recent_anomaly_count
+
+    / 30
+
+)
+
 
 # ==================================================
 # GLOBAL STATUS
@@ -235,31 +347,35 @@ stability = latest["stability_index"]
 
 st.subheader("Reactor Status")
 
-critical_conditions = (
-
-    temp > 380 or
-    radiation > 120
-
-)
-
-warning_conditions = (
-
-    temp > 340 or
-    coolant < 430 or
-    flux > 1150
-
-)
-
-if critical_conditions:
+if scram == 1:
 
     st.error(
-        "CRITICAL: Reactor instability detected"
+        "EMERGENCY SCRAM ACTIVATED"
     )
 
-elif warning_conditions:
+elif (
+
+    temp > 390
+    or radiation > 120
+    or anomaly_ratio > 0.60
+
+):
+
+    st.error(
+        "CRITICAL REACTOR CONDITION"
+    )
+
+elif (
+
+    temp > 340
+    or coolant < 430
+    or flux > 1120
+    or anomaly_ratio > 0.25
+
+):
 
     st.warning(
-        "WARNING: Reactor operating outside safe range"
+        "WARNING: Reactor instability detected"
     )
 
 else:
@@ -268,11 +384,12 @@ else:
         "NORMAL: Reactor stable"
     )
 
+
 # ==================================================
-# HEALTH BAR
+# HEALTH DISPLAY
 # ==================================================
 
-st.subheader("Reactor Health Score")
+st.subheader("Reactor Health")
 
 st.progress(int(health_score))
 
@@ -280,56 +397,126 @@ st.write(
     f"Health Score: {health_score:.2f}/100"
 )
 
+
+# ==================================================
+# AI STATUS
+# ==================================================
+
+st.subheader("AI Monitoring Statistics")
+
+a1, a2, a3, a4 = st.columns(4)
+
+a1.metric(
+
+    "AI Score",
+
+    f"{latest_score:.4f}"
+
+)
+
+a2.metric(
+
+    "Recent Anomalies",
+
+    recent_anomaly_count
+
+)
+
+a3.metric(
+
+    "Anomaly Ratio",
+
+    f"{anomaly_ratio:.2f}"
+
+)
+
+a4.metric(
+
+    "SCRAM",
+
+    "YES" if scram == 1 else "NO"
+
+)
+
+
 # ==================================================
 # LIVE METRICS
 # ==================================================
 
 st.subheader("Live Reactor Metrics")
 
-col1, col2, col3, col4 = st.columns(4)
+c1, c2, c3, c4 = st.columns(4)
 
-col1.metric(
+c1.metric(
+
     "Temperature",
+
     f"{temp:.2f} °C",
+
     f"{temp - prev['temperature']:.2f}"
+
 )
 
-col2.metric(
+c2.metric(
+
     "Pressure",
+
     f"{pressure:.2f} MPa",
+
     f"{pressure - prev['pressure']:.2f}"
+
 )
 
-col3.metric(
+c3.metric(
+
     "Flux",
+
     f"{flux:.2f}",
+
     f"{flux - prev['flux']:.2f}"
+
 )
 
-col4.metric(
+c4.metric(
+
     "Coolant",
+
     f"{coolant:.2f}",
+
     f"{coolant - prev['coolant']:.2f}"
+
 )
 
-col5, col6, col7 = st.columns(3)
+c5, c6, c7 = st.columns(3)
 
-col5.metric(
+c5.metric(
+
     "Radiation",
+
     f"{radiation:.2f}",
+
     f"{radiation - prev['radiation']:.2f}"
+
 )
 
-col6.metric(
+c6.metric(
+
     "Control Rod",
+
     f"{control_rod:.2f} %",
+
     f"{control_rod - prev['control_rod']:.2f}"
+
 )
 
-col7.metric(
+c7.metric(
+
     "Stability Index",
+
     f"{stability:.3f}"
+
 )
+
 
 # ==================================================
 # ROOT CAUSE ANALYSIS
@@ -345,7 +532,7 @@ if coolant < 430:
         "Coolant system degradation"
     )
 
-if flux > 1150:
+if flux > 1120:
 
     causes.append(
         "Neutron flux instability"
@@ -363,25 +550,37 @@ if radiation > 120:
         "Radiation instability"
     )
 
-if control_rod > 80:
+if control_rod > 85:
 
     causes.append(
-        "Emergency control rod insertion"
+        "Emergency rod insertion"
     )
 
-if stability < 1.0:
+if latest_score < -0.10:
 
     causes.append(
-        "Low reactor stability index"
+        "AI detected abnormal operating pattern"
+    )
+
+if stability < 1.15:
+
+    causes.append(
+        "Low reactor stability"
     )
 
 if coolant < 430 and temp > 350:
 
     causes.append(
-        "Possible loss-of-coolant accident"
+        "Possible LOCA scenario"
     )
 
-if causes:
+if scram == 1:
+
+    causes.append(
+        "Automatic reactor shutdown triggered"
+    )
+
+if len(causes) > 0:
 
     for c in causes:
 
@@ -393,33 +592,44 @@ else:
         "No abnormal reactor behavior detected"
     )
 
+
 # ==================================================
 # EVENT CLASSIFICATION
 # ==================================================
 
 def classify_event(row):
 
-    if row["coolant"] < 430:
-        return "Coolant Failure"
+    if row.get("scram", 0) == 1:
 
-    if row["flux"] > 1150:
-        return "Flux Spike"
+        return "SCRAM"
 
     if row["temperature"] > 360:
+
         return "Overheating"
 
-    if row["radiation"] > 120:
-        return "Radiation Spike"
+    if row["coolant"] < 430:
 
-    if row["control_rod"] > 80:
-        return "Emergency Shutdown"
+        return "Coolant Failure"
+
+    if row["flux"] > 1120:
+
+        return "Flux Spike"
+
+    if row["radiation"] > 120:
+
+        return "Radiation Spike"
 
     return "Normal"
 
+
 data["event"] = data.apply(
+
     classify_event,
+
     axis=1
+
 )
+
 
 # ==================================================
 # EVENT TIMELINE
@@ -438,10 +648,13 @@ if len(events) > 0:
         events[[
 
             "time",
+
             "temperature",
+            "pressure",
             "flux",
             "coolant",
             "radiation",
+
             "event"
 
         ]].tail(20)
@@ -454,82 +667,89 @@ else:
         "No abnormal events detected"
     )
 
+
 # ==================================================
-# FOCUSED SENSOR CHART
+# FOCUSED SENSOR ANALYSIS
 # ==================================================
 
 st.subheader("Focused Sensor Analysis")
 
 fig, ax = plt.subplots(
+
     figsize=(14, 5)
+
 )
 
-# sensor line
 ax.plot(
+
     data[selected_sensor],
+
     linewidth=2,
+
     label=selected_sensor
+
 )
 
-# rolling average
 rolling_avg = (
+
     data[selected_sensor]
+
     .rolling(10)
+
     .mean()
+
 )
 
 ax.plot(
+
     rolling_avg,
+
     linestyle="--",
+
     linewidth=2,
+
     label="Rolling Average"
+
 )
 
-# anomaly points
+# filtered anomaly points
+
 anomaly_points = data[
-    data["anomaly"] == -1
+    data["filtered_anomaly"] == -1
 ]
 
 ax.scatter(
+
     anomaly_points.index,
+
     anomaly_points[selected_sensor],
+
     color="red",
+
     label="Anomaly"
+
 )
 
-# threshold lines
-if selected_sensor == "temperature":
+# scram markers
 
-    ax.axhline(
-        y=360,
-        linestyle="--",
-        color="orange",
-        label="Warning Threshold"
-    )
+scram_points = data[
+    data["scram"] == 1
+]
 
-    ax.axhline(
-        y=380,
-        linestyle="--",
-        color="red",
-        label="Critical Threshold"
-    )
+if len(scram_points) > 0:
 
-if selected_sensor == "coolant":
+    ax.scatter(
 
-    ax.axhline(
-        y=430,
-        linestyle="--",
-        color="red",
-        label="Low Coolant Threshold"
-    )
+        scram_points.index,
 
-if selected_sensor == "flux":
+        scram_points[selected_sensor],
 
-    ax.axhline(
-        y=1150,
-        linestyle="--",
-        color="orange",
-        label="Flux Threshold"
+        color="black",
+
+        s=90,
+
+        label="SCRAM"
+
     )
 
 ax.set_title(selected_sensor)
@@ -542,8 +762,9 @@ ax.legend()
 
 st.pyplot(fig)
 
+
 # ==================================================
-# SENSOR MONITORING
+# MULTI SENSOR MONITORING
 # ==================================================
 
 st.subheader("Multi-Sensor Monitoring")
@@ -562,71 +783,98 @@ sensor_list = [
 for sensor in sensor_list:
 
     fig, ax = plt.subplots(
+
         figsize=(12, 3)
+
     )
 
     ax.plot(
+
         data[sensor],
+
         linewidth=2
+
     )
 
     anomaly_points = data[
-        data["anomaly"] == -1
+        data["filtered_anomaly"] == -1
     ]
 
     ax.scatter(
+
         anomaly_points.index,
+
         anomaly_points[sensor],
+
         color="red"
+
     )
 
     ax.set_title(sensor)
 
     st.pyplot(fig)
 
+
 # ==================================================
 # AI SCORE CHART
 # ==================================================
 
-st.subheader("AI Anomaly Score")
+if show_raw_scores:
 
-fig, ax = plt.subplots(
-    figsize=(14, 4)
-)
+    st.subheader("AI Anomaly Score")
 
-ax.plot(
-    data["score"],
-    linewidth=2
-)
+    fig, ax = plt.subplots(
 
-# threshold line
-ax.axhline(
-    y=0,
-    linestyle="--",
-    color="red",
-    label="Anomaly Boundary"
-)
+        figsize=(14, 4)
 
-anomaly_points = data[
-    data["anomaly"] == -1
-]
+    )
 
-ax.scatter(
-    anomaly_points.index,
-    anomaly_points["score"],
-    color="red",
-    label="Anomaly"
-)
+    ax.plot(
 
-ax.set_xlabel("Time")
+        data["score"],
 
-ax.set_ylabel(
-    "Isolation Forest Score"
-)
+        linewidth=2
 
-ax.legend()
+    )
 
-st.pyplot(fig)
+    ax.axhline(
+
+        y=0,
+
+        linestyle="--",
+
+        color="red",
+
+        label="Decision Boundary"
+
+    )
+
+    anomaly_points = data[
+        data["filtered_anomaly"] == -1
+    ]
+
+    ax.scatter(
+
+        anomaly_points.index,
+
+        anomaly_points["score"],
+
+        color="red",
+
+        label="Anomaly"
+
+    )
+
+    ax.set_xlabel("Time")
+
+    ax.set_ylabel(
+        "Isolation Forest Score"
+    )
+
+    ax.legend()
+
+    st.pyplot(fig)
+
 
 # ==================================================
 # ANOMALY STATISTICS
@@ -637,30 +885,50 @@ st.subheader("Anomaly Statistics")
 total_points = len(data)
 
 anomaly_count = len(
-    data[data["anomaly"] == -1]
+
+    data[
+        data["filtered_anomaly"] == -1
+    ]
+
 )
 
-normal_count = total_points - anomaly_count
+normal_count = (
 
-col1, col2, col3 = st.columns(3)
-
-col1.metric(
-    "Total Samples",
     total_points
+
+    - anomaly_count
+
 )
 
-col2.metric(
-    "Anomalies",
+s1, s2, s3 = st.columns(3)
+
+s1.metric(
+
+    "Total Samples",
+
+    total_points
+
+)
+
+s2.metric(
+
+    "Filtered Anomalies",
+
     anomaly_count
+
 )
 
-col3.metric(
+s3.metric(
+
     "Normal Samples",
+
     normal_count
+
 )
+
 
 # ==================================================
-# FILTERED TABLE
+# DATA TABLE
 # ==================================================
 
 st.subheader("Latest Reactor Data")
@@ -670,25 +938,33 @@ display_data = data.copy()
 if show_only_anomaly:
 
     display_data = display_data[
-        display_data["anomaly"] == -1
+        display_data["filtered_anomaly"] == -1
     ]
+
 
 def highlight(row):
 
-    if row["anomaly"] == -1:
+    if row["filtered_anomaly"] == -1:
 
         return (
+
             ["background-color: #ffcccc"]
+
             * len(row)
+
         )
 
     return [""] * len(row)
 
+
 st.dataframe(
 
     display_data.tail(30).style.apply(
+
         highlight,
+
         axis=1
+
     )
 
 )

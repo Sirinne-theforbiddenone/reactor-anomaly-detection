@@ -2,6 +2,6 @@ __pycache__/
 *.pyc
 
 reactor.db
-model.pkl
+*.pkl
 
 .env
