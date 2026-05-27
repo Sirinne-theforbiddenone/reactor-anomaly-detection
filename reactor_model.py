@@ -12,7 +12,7 @@ import random
 def reactor_step(state):
 
     # ==================================================
-    # EXTRACT STATE
+    # LOAD STATE
     # ==================================================
 
     temp = state["temp"]
@@ -34,10 +34,8 @@ def reactor_step(state):
     tick = state["tick"]
 
     # ==================================================
-    # AGING FACTOR
+    # AGING
     # ==================================================
-
-    # reactor slowly becomes unstable
 
     aging = tick / 5000
 
@@ -45,11 +43,11 @@ def reactor_step(state):
     # NORMAL FLUCTUATION
     # ==================================================
 
-    flux += random.uniform(-1.0, 1.0)
+    flux += random.uniform(-1.5, 1.5)
 
-    coolant += random.uniform(-0.25, 0.25)
+    coolant += random.uniform(-0.4, 0.4)
 
-    temp += random.uniform(-0.05, 0.05)
+    temp += random.uniform(-0.08, 0.08)
 
     # ==================================================
     # RANDOM FAULT GENERATION
@@ -59,33 +57,31 @@ def reactor_step(state):
 
         r = random.random()
 
-        # probability increases over time
-
-        base = 0.0015 + aging * 0.0025
+        base = 0.002 + aging * 0.003
 
         if r < base:
 
             fault_mode = "COOLANT_LEAK"
 
-            fault_timer = random.randint(40, 90)
+            fault_timer = random.randint(20, 45)
 
-        elif r < base + 0.0012:
+        elif r < base + 0.0018:
 
             fault_mode = "NEUTRON_SPIKE"
 
-            fault_timer = random.randint(25, 60)
-
-        elif r < base + 0.0024:
-
-            fault_mode = "PUMP_DEGRADATION"
-
-            fault_timer = random.randint(50, 100)
+            fault_timer = random.randint(12, 30)
 
         elif r < base + 0.0032:
 
+            fault_mode = "PUMP_DEGRADATION"
+
+            fault_timer = random.randint(25, 50)
+
+        elif r < base + 0.0042:
+
             fault_mode = "PRESSURE_INSTABILITY"
 
-            fault_timer = random.randint(30, 70)
+            fault_timer = random.randint(15, 35)
 
     # ==================================================
     # FAULT DYNAMICS
@@ -93,40 +89,44 @@ def reactor_step(state):
 
     if fault_mode == "COOLANT_LEAK":
 
-        coolant -= 1.1
+        coolant -= 1.8
 
-        temp += 0.18
-
-        fault_timer -= 1
-
-    elif fault_mode == "NEUTRON_SPIKE":
-
-        flux += 5
-
-        temp += 0.10
-
-        radiation += 0.05
-
-        fault_timer -= 1
-
-    elif fault_mode == "PUMP_DEGRADATION":
-
-        coolant -= 0.7
-
-        temp += 0.08
-
-        fault_timer -= 1
-
-    elif fault_mode == "PRESSURE_INSTABILITY":
-
-        temp += 0.05
+        temp += 0.32
 
         radiation += 0.02
 
         fault_timer -= 1
 
+    elif fault_mode == "NEUTRON_SPIKE":
+
+        flux += 8
+
+        temp += 0.22
+
+        radiation += 0.08
+
+        fault_timer -= 1
+
+    elif fault_mode == "PUMP_DEGRADATION":
+
+        coolant -= 1.0
+
+        temp += 0.18
+
+        fault_timer -= 1
+
+    elif fault_mode == "PRESSURE_INSTABILITY":
+
+        temp += 0.15
+
+        radiation += 0.04
+
+        flux += 2
+
+        fault_timer -= 1
+
     # ==================================================
-    # FAULT RECOVERY
+    # FAULT END
     # ==================================================
 
     if fault_timer <= 0:
@@ -139,123 +139,125 @@ def reactor_step(state):
     # CASCADING EFFECTS
     # ==================================================
 
-    if coolant < 455:
+    if coolant < 465:
 
-        temp += 0.05
+        temp += 0.06
 
-    if coolant < 430:
+    if coolant < 440:
 
-        temp += 0.08
+        temp += 0.12
+
+        radiation += 0.02
 
     if temp > 340:
 
-        radiation += 0.015
+        radiation += 0.02
 
     if temp > 370:
 
-        flux += 1.0
+        flux += 1.5
 
-        radiation += 0.03
-
-    # ==================================================
-    # CONTROL RODS
-    # ==================================================
-
-    flux -= control_rod * 0.045
-
-    flux = max(930, min(flux, 1180))
+        radiation += 0.04
 
     # ==================================================
-    # THERMAL PHYSICS
-    # ==================================================
-
-    reactor_power = (flux - 950) / 100
-
-    heat_generated = reactor_power * 0.15
-
-    cooling_strength = (coolant - 470) / 55
-
-    heat_removed = cooling_strength * 0.14
-
-    temp += (heat_generated - heat_removed)
-
-    # thermal inertia
-
-    temp += (300 - temp) * 0.018
-
-    # ==================================================
-    # PRESSURE MODEL
-    # ==================================================
-
-    pressure = 15 + (temp - 300) * 0.018
-
-    pressure += (flux - 1000) * 0.0015
-
-    pressure = max(10, min(pressure, 30))
-
-    # ==================================================
-    # RADIATION MODEL
-    # ==================================================
-
-    radiation += (flux - 1000) * 0.0002
-
-    radiation += random.uniform(-0.02, 0.02)
-
-    radiation *= 0.9988
-
-    radiation = max(45, min(radiation, 150))
-
-    # ==================================================
-    # AUTOMATIC CONTROL SYSTEM
+    # CONTROL ROD SYSTEM
     # ==================================================
 
     if temp > 335:
 
-        control_rod += 0.35
+        control_rod += 0.45
 
     elif temp < 305:
 
-        control_rod -= 0.12
+        control_rod -= 0.15
 
-    if radiation > 105:
+    if radiation > 100:
 
-        control_rod += 0.2
+        control_rod += 0.3
 
     control_rod = max(0, min(control_rod, 100))
 
     # ==================================================
-    # NEGATIVE FEEDBACK
+    # FLUX CONTROL
     # ==================================================
+
+    flux -= control_rod * 0.05
+
+    # weaker negative feedback
 
     if temp > 360:
 
-        flux *= 0.999
+        flux *= 0.9994
 
     # ==================================================
-    # SYSTEM RECOVERY
+    # THERMAL MODEL
     # ==================================================
 
-    coolant += (500 - coolant) * 0.004
+    reactor_power = (flux - 950) / 100
 
-    flux += (1000 - flux) * 0.0025
+    heat_generated = reactor_power * 0.18
 
-    radiation += (50 - radiation) * 0.0012
+    cooling_strength = (coolant - 470) / 50
+
+    heat_removed = cooling_strength * 0.13
+
+    temp += (heat_generated - heat_removed)
+
+    # weaker thermal inertia
+
+    temp += (300 - temp) * 0.012
 
     # ==================================================
-    # LATE GAME DETERIORATION
+    # PRESSURE
     # ==================================================
 
-    if tick > 4200:
+    pressure = 15 + (temp - 300) * 0.02
+
+    pressure += (flux - 1000) * 0.002
+
+    pressure = max(10, min(pressure, 30))
+
+    # ==================================================
+    # RADIATION
+    # ==================================================
+
+    radiation += (flux - 1000) * 0.00025
+
+    radiation += random.uniform(-0.03, 0.03)
+
+    radiation *= 0.999
+
+    # ==================================================
+    # RECOVERY SYSTEM
+    # ==================================================
+
+    coolant += (500 - coolant) * 0.0035
+
+    flux += (1000 - flux) * 0.002
+
+    radiation += (50 - radiation) * 0.001
+
+    # ==================================================
+    # ENDGAME DETERIORATION
+    # ==================================================
+
+    if tick > 3800:
 
         temp += 0.015
 
-        radiation += 0.01
+        radiation += 0.008
 
-    if tick > 4700:
+    if tick > 4400:
 
         temp += 0.03
 
         radiation += 0.015
+
+    if tick > 4800:
+
+        temp += 0.05
+
+        radiation += 0.03
 
     # ==================================================
     # SCRAM CONDITIONS
@@ -263,17 +265,17 @@ def reactor_step(state):
 
     if (
 
-        temp > 445
-        or radiation > 132
+        temp > 440
+        or radiation > 130
         or pressure > 28
 
     ):
 
         shutdown = True
 
-    # forced endgame scram
+    # forced ending
 
-    if tick > 4900 and temp > 390:
+    if tick >= 4950:
 
         shutdown = True
 
@@ -285,35 +287,39 @@ def reactor_step(state):
 
         control_rod = 100
 
-        flux *= 0.92
+        flux *= 0.90
 
-        coolant += 2
+        coolant += 3
 
-        temp -= 0.5
+        temp -= 0.7
 
-        radiation *= 0.996
+        radiation *= 0.995
 
     # ==================================================
-    # SAFETY CLAMPS
+    # LIMITS
     # ==================================================
 
     coolant = max(350, min(coolant, 550))
 
     temp = max(250, min(temp, 520))
 
+    radiation = max(40, min(radiation, 160))
+
+    flux = max(900, min(flux, 1250))
+
     # ==================================================
     # SENSOR NOISE
     # ==================================================
 
-    measured_temp = temp + random.uniform(-0.15, 0.15)
+    measured_temp = temp + random.uniform(-0.2, 0.2)
 
-    measured_pressure = pressure + random.uniform(-0.03, 0.03)
+    measured_pressure = pressure + random.uniform(-0.05, 0.05)
 
-    measured_flux = flux + random.uniform(-1.0, 1.0)
+    measured_flux = flux + random.uniform(-1.5, 1.5)
 
-    measured_coolant = coolant + random.uniform(-0.4, 0.4)
+    measured_coolant = coolant + random.uniform(-0.5, 0.5)
 
-    measured_radiation = radiation + random.uniform(-0.03, 0.03)
+    measured_radiation = radiation + random.uniform(-0.05, 0.05)
 
     # ==================================================
     # UPDATE STATE
