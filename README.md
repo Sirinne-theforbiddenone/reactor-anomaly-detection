@@ -53,6 +53,10 @@ project/
 ```
 
 ## Các bước chạy chương trình
+# Download python
+https://www.python.org/downloads/
+
+# Các bước sau đây thực hiện trên terminal của hệ điều hành
 # Cài đặt thư viện
 pip install -r requirements.txt
 
